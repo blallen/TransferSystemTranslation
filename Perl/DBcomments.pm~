@@ -111,12 +111,11 @@ $ENV{LD_LIBRARY_PATH} = join ":",
 
 # Constructor. Takes options for Getopt as parameter
 sub new {
-    #unpacks arguments (first one is the class so it's put there, rest are the options so they go in a new options hash)
+    #unpacks arguments
     my ( $class, %options ) = @_;
-    #creates instance of class
+    #creates instance of class?
     my $self = bless {}, $class;
 
-    # remove help text from options hash and put into its own variable
     my $helpText = delete $options{help};
 
     #    local @ARGV = @ARGV;

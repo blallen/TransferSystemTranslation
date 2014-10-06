@@ -18,14 +18,12 @@ my $helpText = <<'END_OF_HELP';
     nodbupdate => Do not update the DB when re-submitting (so no duplicate
                   entry in FILES_TRANS_NEW). Also true when --checksum is used
 END_OF_HELP
-# initialize option variables to be passed into instance of DB
+# declaring vars
 my $max;
 my $all         = 0;
 my $nodbupdate  = 0;
 my $wantedState = '.*';
 my $wantedFiles = '.*';
-
-# assigns variables from above into a hash that will be passed into GetOptions in initialize of DB object
 my %options     = (
     help => $helpText,
 
@@ -35,10 +33,8 @@ my %options     = (
     "pattern=s"  => \$wantedFiles,
     "nodbupdate" => \$nodbupdate,
 );
-#creates instance of class git 
+#creates instance of class (again, why ANYONE would choose perl for OO programming is beyond me)
 my $book = StorageManager::DB->new(%options);
-
-
 my $done = 0;
 
 for my $runnumber ( $book->getRunList() ) {

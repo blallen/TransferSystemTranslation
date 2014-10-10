@@ -18,6 +18,7 @@ my $helpText = <<'END_OF_HELP';
     nodbupdate => Do not update the DB when re-submitting (so no duplicate
                   entry in FILES_TRANS_NEW). Also true when --checksum is used
 END_OF_HELP
+
 # initialize option variables to be passed into instance of DB
 my $max;
 my $all         = 0;
@@ -26,6 +27,7 @@ my $wantedState = '.*';
 my $wantedFiles = '.*';
 
 # assigns variables from above into a hash that will be passed into GetOptions in initialize of DB object
+# =s means a mandatory
 my %options     = (
     help => $helpText,
 

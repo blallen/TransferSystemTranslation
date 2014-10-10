@@ -86,6 +86,7 @@ our $doChecksum = 0;
 our $removeBad  = 0;
 our $t0dir      = "/nfshome0/cmsprod/TransferTest";
 our $t0script   = "$t0dir/injection/sendNotification.sh";
+# load config settings from config file
 our $config     = catfile( $ENV{HOME}, '.db.conf' );
 our $hostname;
 
@@ -120,15 +121,14 @@ sub new {
     my $helpText = delete $options{help};
 
     #    local @ARGV = @ARGV;
-    #searches for the following strings in the list of flags passed when running the program.  If it finds one of these, it assigns a value to
-    #the variable the array points to?  It is easiest to substantially change this part of the code in python (this method is considered
-    #outdated and hard to read)
+    # searches for the following strings in the list of flags passed when running the program.  If it finds one of these, it assigns a value to the variable the array points to?  It is easiest to substantially change this part of the code in python (this method is considered outdated and hard to read)
+    # =s means a mandatory argument
     GetOptions(
         "h|help"  => \$help,
         "debug"   => \$debug,
         "deleted" => \$showDeleted,
 
-        "config=s"    => \$config,
+        "config=s"    => \$config, # loaded from a config file
         "runnumber=s" => \@runs,
         "last=s"      => \$last,
         "skip=s"      => \$skip,
@@ -142,9 +142,12 @@ sub new {
         "log"         => \$showLog,
         %options
     ) or die "GetOptions failed: $!";
+
     help($helpText) if $help;
     $debug && print "Creating book with config $config\n";
-    $self->{book} = $self->getBook($config);
+
+    # calls get book method which intializing a SQL phrasebook to interface with the database
+    $self->{book} = $self->getBook($config); # pass config file to getBook
     if ($full) {
         delete @hide{qw(FILES_TRANS_INSERTED FILES_TRANS_REPACKED)};
     }
@@ -157,11 +160,13 @@ sub new {
 # Returns a phrasebook for SQL queries
 #I think Obasi did some work on these subroutines, so he might be able to provide some insight here.
 sub getBook {
-    my ( $self, @args ) = @_;
+    my ( $self, @args ) = @_; # @args = $config from DB->new()
+    # ||= assigns a new phrasebook to self->book if it is unassigned
     return $self->{book} ||= Data::Phrasebook->new(
-        class  => 'SQL',
-        loader => 'YAML',
-        dbh    => $self->getDatabaseHandler(@args),
+        class  => 'SQL', # initialize as SQL class
+        loader => 'YAML', # use YAML loader class
+	# loads a database handler
+        dbh    => $self->getDatabaseHandler(@args), # pass config file getDataBaseHandler
         file =>
           catfile( dirname( $INC{"StorageManager/DB.pm"} ), "sql_lib.yml" ),
         debug => 2,
@@ -200,9 +205,9 @@ sub getRunList {
     return @runs;
 }
 
-# Read configuration properly
+# Read configuration file properly
 sub readConfig {
-    my ( $self, $config, $wantWriter ) = @_;
+    my ( $self, $config, $wantWriter ) = @_; # $config = config file, $wantWriter = ???
     my ( $reader, $phrase, $dbi, $writer, $wphrase, $t0writer, $t0phrase );
     if ( $config && -r $config ) {
         open my $fh, '<', $config or die "open($config): $!";
@@ -250,9 +255,11 @@ sub readConfig {
 
 # setup DB connection
 sub getDatabaseHandler {
-    my ( $self, $config ) = @_;
-    return $readerDatabaseHandler if defined $readerDatabaseHandler;
-    my ( $reader, $phrase, $dbi ) = $self->readConfig($config);
+    my ( $self, $config ) = @_; # $config = @args from DB->getBook() = $config from DB->new() which is read from a config file
+    return $readerDatabaseHandler if defined $readerDatabaseHandler; # this only happens if a book has been loaded before
+    # or at least this variable is uninitialized in this file
+    # reads config file and saves them to new variables
+    my ( $reader, $phrase, $dbi ) = $self->readConfig($config); # passes config file to readConfig (which makes sense)
     $debug && print "Setting up DB connection for $dbi and $reader\n";
     my $dbh = DBI->connect( $dbi, $reader, $phrase )
       or die("Error: Connection to Oracle DB failed");
@@ -261,7 +268,7 @@ sub getDatabaseHandler {
 }
 
 sub getWriterDatabaseHandler {
-    my ( $self, $config ) = @_;
+    my ( $self, $config ) = @_; 
     return $writerDatabaseHandler if defined $writerDatabaseHandler;
     my ( $writer, $wphrase, $dbi ) = $self->readConfig( $config, 1 );
     $debug && print "Setting up DB connection for $dbi and $writer\n";

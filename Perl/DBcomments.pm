@@ -166,8 +166,10 @@ sub getBook {
         class  => 'SQL', # initialize as SQL class
         loader => 'YAML', # use YAML loader class
 	# loads a database handler
-        dbh    => $self->getDatabaseHandler(@args), # pass config file getDataBaseHandler
-        file =>
+        dbh    => $self->getDatabaseHandler(@args), # get a database handler based on info in config file 
+	                                            # default database is "CMS_STOMGR_W" 
+        # store SQL library for some reason or other
+	file =>
           catfile( dirname( $INC{"StorageManager/DB.pm"} ), "sql_lib.yml" ),
         debug => 2,
     );
@@ -207,18 +209,28 @@ sub getRunList {
 
 # Read configuration file properly
 sub readConfig {
-    my ( $self, $config, $wantWriter ) = @_; # $config = config file, $wantWriter = ???
+    my ( $self, $config, $wantWriter ) = @_; # $config = config file, 
+                                             # $wantWriter = option to determine what kind of interface
+    # okay let's declare a lot of variables
     my ( $reader, $phrase, $dbi, $writer, $wphrase, $t0writer, $t0phrase );
+    # checks if you have a readable config file
     if ( $config && -r $config ) {
+	# opens config file and assigns its handle to $fh; returns an error message if this fails
         open my $fh, '<', $config or die "open($config): $!";
+	# read entire config file
         while (<$fh>) {
-            next if /^\s*#/;
+            next if /^\s*#/; # skip comments (lines starting with #)
+	    # the below regex translates to
+	    # " $var = 'string' ;" or ' $var = "string" ;' or " $var = value ;"
+	    # so this config file is basically a list of perl variable declarations which we import 
+	    # (I hope, still need to look at actual file)
             if ( my ( $key, $value ) =
                 /^\s*\$(\w+)\s*=\s*['"]?(\S+?)['"]?\s*;/ )
+		# assigns values to the following variables from the config file
             {
-                $reader   = $value, next if $key eq "reader";
-                $phrase   = $value, next if $key eq "phrase";
-                $dbi      = $value, next if $key eq "dbi";
+                $reader   = $value, next if $key eq "reader";   # default is "CMS_STOMGR_W"
+                $phrase   = $value, next if $key eq "phrase";   # pass phrase
+                $dbi      = $value, next if $key eq "dbi";      # default is "DBI:Oracle:CMS_RCMS"
                 $writer   = $value, next if $key eq "writer";
                 $wphrase  = $value, next if $key eq "wphrase";
                 $t0writer = $value, next if $key eq "t0writer";
@@ -229,14 +241,18 @@ sub readConfig {
         }
         close $fh;
     }
+
+    
     if ($wantWriter) {
-        if ( $wantWriter == 1 ) {
+        # if called from getWriterDatabaseHandler() make sure have appropriate config
+	if ( $wantWriter == 1 ) {
 
             unless ( $writer && $wphrase ) {
                 die "No writer DB configuration. Aborting.";
             }
             return ( $writer, $wphrase, $dbi );
         }
+	# if called from getTier0DatabaseHandler() make sure have appropriate config
         elsif ( $wantWriter == 2 ) {
             unless ( $t0writer && $t0phrase ) {
                 die "No Tier0 writer DB configuration. Aborting.";
@@ -247,6 +263,7 @@ sub readConfig {
             die "Unknown DB configuration requested: $wantWriter";
         }
     }
+    # if called from getDatabaseHandler() make sure have appropriate config
     unless ( $reader && $phrase ) {
         die "No DB configuration. Aborting.";
     }
@@ -260,7 +277,12 @@ sub getDatabaseHandler {
     # or at least this variable is uninitialized in this file
     # reads config file and saves them to new variables
     my ( $reader, $phrase, $dbi ) = $self->readConfig($config); # passes config file to readConfig (which makes sense)
+    # defaults to:
+    # $reader = "CMS_STOMGR_W"
+    # $phrase = "a pass word"
+    # $dbi = "DBI:Oracle:CMS_RCMS"
     $debug && print "Setting up DB connection for $dbi and $reader\n";
+    # get database handler using info from config file
     my $dbh = DBI->connect( $dbi, $reader, $phrase )
       or die("Error: Connection to Oracle DB failed");
     $debug && print "DB connection set up successfully \n";

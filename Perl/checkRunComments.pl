@@ -27,7 +27,7 @@ my $wantedState = '.*';
 my $wantedFiles = '.*';
 
 # assigns variables from above into a hash that will be passed into GetOptions in initialize of DB object
-# =s means a mandatory
+# =s means a mandatory argument
 my %options     = (
     help => $helpText,
 
@@ -37,7 +37,9 @@ my %options     = (
     "pattern=s"  => \$wantedFiles,
     "nodbupdate" => \$nodbupdate,
 );
-#creates instance of class git 
+# creates instance of DB
+# returns a new SQL phrase book with a YAML loader class
+# and a database handle for "CMS_STOMGR_W" (or another database loaded from .db.conf)
 my $book = StorageManager::DB->new(%options);
 
 

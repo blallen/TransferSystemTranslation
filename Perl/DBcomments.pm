@@ -147,7 +147,7 @@ sub new {
     $debug && print "Creating book with config $config\n";
 
     # calls get book method which intializing a SQL phrasebook to interface with the database
-    $self->{book} = $self->getBook($config); # pass config file to getBook
+    $self->{book} = $self->getBook($config); # use config file to generate phrasebook and store as $self->{book}
     if ($full) {
         delete @hide{qw(FILES_TRANS_INSERTED FILES_TRANS_REPACKED)};
     }
@@ -168,7 +168,7 @@ sub getBook {
 	# loads a database handler
         dbh    => $self->getDatabaseHandler(@args), # get a database handler based on info in config file 
 	                                            # default database is "CMS_STOMGR_W" 
-        # store SQL library for some reason or other
+        # load phrasebook library from file
 	file =>
           catfile( dirname( $INC{"StorageManager/DB.pm"} ), "sql_lib.yml" ),
         debug => 2,
@@ -178,30 +178,41 @@ sub getBook {
 # Proxy queries to the book
 sub query {
     my ( $self, @args ) = @_;
-    my $book = $self->getBook;
+    my $book = $self->getBook; # get phrasebook
     return $book->query(@args);
 }
 
 # Get the run list based on parameters, or last runs
 sub getRunList {
     my $self = shift;
-    unless (@runs) {
-        my $book = $self->getBook();
-        my $sth  = $book->query('getLatestRun');
-        $skip = 1 unless defined $skip;
-        $last = 2 unless defined $last;
+    # check if @runs already exists
+    unless (@runs) { 
+        my $book = $self->getBook(); # get phrasebook
+        my $sth  = $book->query('getLatestRun'); # returns a statement handle with an array of run numbers listed in descending order
+        $skip = 1 unless defined $skip; # should be initialized to undef when DB class is initialized
+        $last = 2 unless defined $last; # should be initialized to undef when DB class is initialized
         unless (
             @runs = map { $_->[0] } @{ $sth->fetchall_arrayref( [0], $last + $skip ) }
+	    # @{stuff} returns an array of array references to the run numbers for the three latest runs 
+	    # map { $_->[0] @array grabs first element from array
+	    # thus @runs is an array of run numbers for the 3 latest runs in descending order
           )
         {
             die "You did not specify a run number,"
               . " and I could not find the latest one.";
         }
     }
-    $skip ||= 0;
-    $last ||= @runs;
+
+    $skip ||= 0; # sets skip to zero if @runs already existed
+    $last ||= @runs; # sets last equal to the number of run numbers in @runs if @runs already existed
     @runs = reverse splice @runs, $skip, $last;
-    if ($#runs) {
+    # splice @array, offset, number of elements to remove
+    # so splice command saves latest run number and removes the next two runs
+    # so input to reverse should be a array of length 1
+    # reverse @array sends $array[0] to $array[n-1], $array[1] to $array[n-2], etc and vice versa 
+    # thus reverse does nothing in default case, 
+    # but would give you a set of runs in ascending order if you changed the default skip and last parameters
+    if ($#runs) { # $#runs is max index of @runs array.... should be 0 at this point????
         print "Will check " . @runs . " runs: " . join( " ", @runs ) . "\n";
     }
     return @runs;
@@ -225,7 +236,7 @@ sub readConfig {
 	    # so this config file is basically a list of perl variable declarations which we import 
 	    # (I hope, still need to look at actual file)
             if ( my ( $key, $value ) =
-                /^\s*\$(\w+)\s*=\s*['"]?(\S+?)['"]?\s*;/ )
+                /^\s*\$(\w+)\s*=\s*['"]?(\S+?)["']?\s*;/ )
 		# assigns values to the following variables from the config file
             {
                 $reader   = $value, next if $key eq "reader";   # default is "CMS_STOMGR_W"

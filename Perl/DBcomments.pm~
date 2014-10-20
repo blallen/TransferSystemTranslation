@@ -86,6 +86,7 @@ our $doChecksum = 0;
 our $removeBad  = 0;
 our $t0dir      = "/nfshome0/cmsprod/TransferTest";
 our $t0script   = "$t0dir/injection/sendNotification.sh";
+# load config settings from config file
 our $config     = catfile( $ENV{HOME}, '.db.conf' );
 our $hostname;
 
@@ -111,23 +112,23 @@ $ENV{LD_LIBRARY_PATH} = join ":",
 
 # Constructor. Takes options for Getopt as parameter
 sub new {
-    #unpacks arguments
+    #unpacks arguments (first one is the class so it's put there, rest are the options so they go in a new options hash)
     my ( $class, %options ) = @_;
-    #creates instance of class?
+    #creates instance of class
     my $self = bless {}, $class;
 
+    # remove help text from options hash and put into its own variable
     my $helpText = delete $options{help};
 
     #    local @ARGV = @ARGV;
-    #searches for the following strings in the list of flags passed when running the program.  If it finds one of these, it assigns a value to
-    #the variable the array points to?  It is easiest to substantially change this part of the code in python (this method is considered
-    #outdated and hard to read)
+    # searches for the following strings in the list of flags passed when running the program.  If it finds one of these, it assigns a value to the variable the array points to?  It is easiest to substantially change this part of the code in python (this method is considered outdated and hard to read)
+    # =s means a mandatory argument
     GetOptions(
         "h|help"  => \$help,
         "debug"   => \$debug,
         "deleted" => \$showDeleted,
 
-        "config=s"    => \$config,
+        "config=s"    => \$config, # loaded from a config file
         "runnumber=s" => \@runs,
         "last=s"      => \$last,
         "skip=s"      => \$skip,
@@ -141,9 +142,12 @@ sub new {
         "log"         => \$showLog,
         %options
     ) or die "GetOptions failed: $!";
+
     help($helpText) if $help;
     $debug && print "Creating book with config $config\n";
-    $self->{book} = $self->getBook($config);
+
+    # calls get book method which intializing a SQL phrasebook to interface with the database
+    $self->{book} = $self->getBook($config); # use config file to generate phrasebook and store as $self->{book}
     if ($full) {
         delete @hide{qw(FILES_TRANS_INSERTED FILES_TRANS_REPACKED)};
     }
@@ -156,12 +160,16 @@ sub new {
 # Returns a phrasebook for SQL queries
 #I think Obasi did some work on these subroutines, so he might be able to provide some insight here.
 sub getBook {
-    my ( $self, @args ) = @_;
+    my ( $self, @args ) = @_; # @args = $config from DB->new()
+    # ||= assigns a new phrasebook to self->book if it is unassigned
     return $self->{book} ||= Data::Phrasebook->new(
-        class  => 'SQL',
-        loader => 'YAML',
-        dbh    => $self->getDatabaseHandler(@args),
-        file =>
+        class  => 'SQL', # initialize as SQL class
+        loader => 'YAML', # use YAML loader class
+	# loads a database handler
+        dbh    => $self->getDatabaseHandler(@args), # get a database handler based on info in config file 
+	                                            # default database is "CMS_STOMGR_W" 
+        # load phrasebook library from file
+	file =>
           catfile( dirname( $INC{"StorageManager/DB.pm"} ), "sql_lib.yml" ),
         debug => 2,
     );
@@ -170,26 +178,29 @@ sub getBook {
 # Proxy queries to the book
 sub query {
     my ( $self, @args ) = @_;
-    my $book = $self->getBook;
+    my $book = $self->getBook; # get phrasebook
     return $book->query(@args);
 }
 
 # Get the run list based on parameters, or last runs
 sub getRunList {
     my $self = shift;
-    unless (@runs) {
-        my $book = $self->getBook();
-        my $sth  = $book->query('getLatestRun');
+    # check if @runs already exists
+    unless (@runs) { 
+        my $book = $self->getBook(); # get phrasebook
+        my $sth  = $book->query('getLatestRun'); # send the query "get latest run" to "CMS_STOMGR_W" and a return a statement handle
         $skip = 1 unless defined $skip;
         $last = 2 unless defined $last;
         unless (
             @runs = map { $_->[0] } @{ $sth->fetchall_arrayref( [0], $last + $skip ) }
+	    # 
           )
         {
             die "You did not specify a run number,"
               . " and I could not find the latest one.";
         }
     }
+
     $skip ||= 0;
     $last ||= @runs;
     @runs = reverse splice @runs, $skip, $last;
@@ -199,20 +210,30 @@ sub getRunList {
     return @runs;
 }
 
-# Read configuration properly
+# Read configuration file properly
 sub readConfig {
-    my ( $self, $config, $wantWriter ) = @_;
+    my ( $self, $config, $wantWriter ) = @_; # $config = config file, 
+                                             # $wantWriter = option to determine what kind of interface
+    # okay let's declare a lot of variables
     my ( $reader, $phrase, $dbi, $writer, $wphrase, $t0writer, $t0phrase );
+    # checks if you have a readable config file
     if ( $config && -r $config ) {
+	# opens config file and assigns its handle to $fh; returns an error message if this fails
         open my $fh, '<', $config or die "open($config): $!";
+	# read entire config file
         while (<$fh>) {
-            next if /^\s*#/;
+            next if /^\s*#/; # skip comments (lines starting with #)
+	    # the below regex translates to
+	    # " $var = 'string' ;" or ' $var = "string" ;' or " $var = value ;"
+	    # so this config file is basically a list of perl variable declarations which we import 
+	    # (I hope, still need to look at actual file)
             if ( my ( $key, $value ) =
                 /^\s*\$(\w+)\s*=\s*['"]?(\S+?)['"]?\s*;/ )
+		# assigns values to the following variables from the config file
             {
-                $reader   = $value, next if $key eq "reader";
-                $phrase   = $value, next if $key eq "phrase";
-                $dbi      = $value, next if $key eq "dbi";
+                $reader   = $value, next if $key eq "reader";   # default is "CMS_STOMGR_W"
+                $phrase   = $value, next if $key eq "phrase";   # pass phrase
+                $dbi      = $value, next if $key eq "dbi";      # default is "DBI:Oracle:CMS_RCMS"
                 $writer   = $value, next if $key eq "writer";
                 $wphrase  = $value, next if $key eq "wphrase";
                 $t0writer = $value, next if $key eq "t0writer";
@@ -223,14 +244,18 @@ sub readConfig {
         }
         close $fh;
     }
+
+    
     if ($wantWriter) {
-        if ( $wantWriter == 1 ) {
+        # if called from getWriterDatabaseHandler() make sure have appropriate config
+	if ( $wantWriter == 1 ) {
 
             unless ( $writer && $wphrase ) {
                 die "No writer DB configuration. Aborting.";
             }
             return ( $writer, $wphrase, $dbi );
         }
+	# if called from getTier0DatabaseHandler() make sure have appropriate config
         elsif ( $wantWriter == 2 ) {
             unless ( $t0writer && $t0phrase ) {
                 die "No Tier0 writer DB configuration. Aborting.";
@@ -241,6 +266,7 @@ sub readConfig {
             die "Unknown DB configuration requested: $wantWriter";
         }
     }
+    # if called from getDatabaseHandler() make sure have appropriate config
     unless ( $reader && $phrase ) {
         die "No DB configuration. Aborting.";
     }
@@ -249,10 +275,17 @@ sub readConfig {
 
 # setup DB connection
 sub getDatabaseHandler {
-    my ( $self, $config ) = @_;
-    return $readerDatabaseHandler if defined $readerDatabaseHandler;
-    my ( $reader, $phrase, $dbi ) = $self->readConfig($config);
+    my ( $self, $config ) = @_; # $config = @args from DB->getBook() = $config from DB->new() which is read from a config file
+    return $readerDatabaseHandler if defined $readerDatabaseHandler; # this only happens if a book has been loaded before
+    # or at least this variable is uninitialized in this file
+    # reads config file and saves them to new variables
+    my ( $reader, $phrase, $dbi ) = $self->readConfig($config); # passes config file to readConfig (which makes sense)
+    # defaults to:
+    # $reader = "CMS_STOMGR_W"
+    # $phrase = "a pass word"
+    # $dbi = "DBI:Oracle:CMS_RCMS"
     $debug && print "Setting up DB connection for $dbi and $reader\n";
+    # get database handler using info from config file
     my $dbh = DBI->connect( $dbi, $reader, $phrase )
       or die("Error: Connection to Oracle DB failed");
     $debug && print "DB connection set up successfully \n";
@@ -260,7 +293,7 @@ sub getDatabaseHandler {
 }
 
 sub getWriterDatabaseHandler {
-    my ( $self, $config ) = @_;
+    my ( $self, $config ) = @_; 
     return $writerDatabaseHandler if defined $writerDatabaseHandler;
     my ( $writer, $wphrase, $dbi ) = $self->readConfig( $config, 1 );
     $debug && print "Setting up DB connection for $dbi and $writer\n";

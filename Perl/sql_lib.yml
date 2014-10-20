@@ -1,0 +1,472 @@
+# SQL phrasebook to interface with CMS_STOMGR_W database
+---
+checkRun: >
+  select fc.HOSTNAME, fc.STREAM,
+    fc.FILENAME as FILENAME,
+    fc.FILENAME as FILES_CREATED,
+    fi.FILENAME as FILES_INJECTED,
+    ftne.FILENAME as FILES_TRANS_NEW,
+    ftco.FILENAME as FILES_TRANS_COPIED,
+    ftch.FILENAME as FILES_TRANS_CHECKED,
+    ftin.FILENAME as FILES_TRANS_INSERTED,
+    ftre.FILENAME as FILES_TRANS_REPACKED,
+    fd.FILENAME as FILES_DELETED,
+    fc.SETUPLABEL,
+    fc.TYPE,
+    fc.STREAM,
+    fc.APP_NAME,
+    fc.APP_VERSION,
+    fc.RUNNUMBER,
+    fc.LUMISECTION,
+    (cast(fc.CTIME as date) - to_date('19700101','YYYYMMDD')) * 86400 as STARTTIME,
+    fi.CHECKSUM,
+    fi.PATHNAME,
+    fi.DESTINATION,
+    fi.NEVENTS,
+    fi.FILESIZE,
+    (cast(fi.ITIME as date) - to_date('19700101','YYYYMMDD')) * 86400 as STOPTIME,
+    fi.INDFILENAME,
+    fi.INDFILESIZE,
+    fi.COMMENT_STR as HLTKEY
+  from CMS_STOMGR.FILES_CREATED fc
+    left outer join CMS_STOMGR.FILES_INJECTED fi
+      on fc.FILENAME=fi.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_NEW ftne
+      on fc.FILENAME=ftne.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_COPIED ftco
+      on fc.FILENAME=ftco.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_CHECKED ftch
+      on fc.FILENAME=ftch.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_INSERTED ftin
+      on fc.FILENAME=ftin.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_REPACKED ftre
+      on fc.FILENAME=ftre.FILENAME
+    left outer join CMS_STOMGR.FILES_DELETED fd
+      on fc.FILENAME=fd.FILENAME
+  where RUNNUMBER = :runnumber
+  :hostname
+
+updateChecksum: >
+  update CMS_STOMGR.FILES_INJECTED
+  set CHECKSUM = :checksum, FILESIZE = :filesize
+  where FILENAME = :filename
+
+# returns an array of all unique run numbers with the latest run number as the first entry
+getLatestRun: >
+  select RUNNUMBER from CMS_STOMGR.RUNS
+  where runnumber > 140400 and runnumber < 1000000
+  group by RUNNUMBER
+  order by 1 desc
+  nulls last
+
+getHltKey: >
+   select STRING_VALUE from CMS_RUNINFO.RUNSESSION_PARAMETER
+   where RUNNUMBER = :runnumber
+     and NAME = :parameter
+#     and NAME='CMS.LVL0:HLT_KEY_DESCRIPTION'
+
+checkFile: >
+  select fc.FILENAME,
+    fc.HOSTNAME,
+    fi.CHECKSUM,
+    fc.CTIME as FILES_CREATED,
+    fi.ITIME as FILES_INJECTED,
+    ftne.ITIME as FILES_TRANS_NEW,
+    ftco.ITIME as FILES_TRANS_COPIED,
+    ftch.ITIME as FILES_TRANS_CHECKED,
+    ftin.ITIME as FILES_TRANS_INSERTED,
+    ftre.ITIME as FILES_TRANS_REPACKED,
+    fd.DTIME as FILES_DELETED,
+    fc.SETUPLABEL,
+    fc.TYPE,
+    fc.STREAM,
+    fc.APP_NAME,
+    fc.APP_VERSION,
+    fc.RUNNUMBER,
+    fc.LUMISECTION,
+    (cast(fc.CTIME as date) - to_date('19700101','YYYYMMDD')) * 86400 as STARTTIME,
+    fi.PATHNAME,
+    fi.DESTINATION,
+    fi.NEVENTS,
+    fi.FILESIZE,
+    (cast(fi.ITIME as date) - to_date('19700101','YYYYMMDD')) * 86400 as STOPTIME,
+    fi.INDFILENAME,
+    fi.INDFILESIZE,
+    fi.COMMENT_STR as HLTKEY
+  from CMS_STOMGR.FILES_CREATED fc
+    left outer join CMS_STOMGR.FILES_INJECTED fi
+      on fc.FILENAME=fi.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_NEW ftne
+      on fc.FILENAME=ftne.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_COPIED ftco
+      on fc.FILENAME=ftco.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_CHECKED ftch
+      on fc.FILENAME=ftch.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_INSERTED ftin
+      on fc.FILENAME=ftin.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_REPACKED ftre
+      on fc.FILENAME=ftre.FILENAME
+    left outer join CMS_STOMGR.FILES_DELETED fd
+      on fc.FILENAME=fd.FILENAME
+  where fc.FILENAME = :filename
+
+checkSmInstances: >
+  select min(fc.FILENAME) as FILENAME,
+    fc.RUNNUMBER,
+    fc.INSTANCE,
+    count(fc.FILENAME) as N_CREATED,
+    count(fi.FILENAME) as N_INJECTED,
+    count(ftne.FILENAME) as N_NEW,
+    count(ftco.FILENAME) as N_COPIED,
+    count(ftch.FILENAME) as N_CHECKED,
+    count(ftin.FILENAME) as N_INSERTED,
+    count(ftre.FILENAME) as N_REPACKED,
+    count(fd.FILENAME) as N_DELETED,
+    max(fi.ITIME) as LAST_WRITE_TIME,
+    min(fc.SETUPLABEL) as SETUPLABEL,
+    fc.HOSTNAME as HOSTNAME,
+    0 as N_UNACCOUNT,
+    min(fc.CTIME) as START_WRITE_TIME,
+    0 as DISKFULL,
+    min(ftre.ITIME) as START_REPACK_TIME,
+    max(ftre.ITIME) as STOP_REPACK_TIME,
+    max(fd.DTIME) as STOP_DELETE_TIME,
+    count(e.FILENAME) as N_NOTREPACKED
+  from CMS_STOMGR.FILES_CREATED fc
+    left outer join CMS_STOMGR.FILES_INJECTED fi
+      on fc.FILENAME=fi.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_NEW ftne
+      on fc.FILENAME=ftne.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_COPIED ftco
+      on fc.FILENAME=ftco.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_CHECKED ftch
+      on fc.FILENAME=ftch.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_INSERTED ftin
+      on fc.FILENAME=ftin.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_REPACKED ftre
+      on fc.FILENAME=ftre.FILENAME
+    left outer join CMS_STOMGR.FILES_DELETED fd
+      on fc.FILENAME=fd.FILENAME
+    left outer join CMS_STOMGR.FILES_CREATED e
+      on fc.FILENAME=e.FILENAME
+         and (   e.STREAM = 'Error'
+              or e.STREAM like '%_NoRepack')
+  where fc.RUNNUMBER = :runnumber
+    and fc.PRODUCER = 'StorageManager'
+  group by fc.RUNNUMBER, fc.INSTANCE, fc.HOSTNAME
+  order by fc.RUNNUMBER, fc.INSTANCE
+
+selectSmInstances: >
+  select * from CMS_STOMGR.SM_INSTANCES
+  where RUNNUMBER = :runnumber
+  order by INSTANCE
+
+fixPage1: >
+  update :table
+  set :column = :value
+  where RUNNUMBER = :runnumber
+    and :indexColumn = :index
+
+selectSmSummary: >
+  select * from CMS_STOMGR.SM_SUMMARY
+  where RUNNUMBER = :runnumber
+  order by STREAM
+
+checkSmSummary: >
+  select min(fc.FILENAME) as FILENAME,
+    fc.RUNNUMBER,
+    min(fc.SETUPLABEL) as SETUPLABEL,
+    min(fc.APP_VERSION) as APP_VERSION,
+    sum(fc.LUMISECTION) as S_LUMISECTION,
+    sum(fi.FILESIZE) as S_FILESIZE,
+    sum(fi.FILESIZE) as S_FILESIZE2D,
+    sum(fi.FILESIZE) as S_FILESIZE2T0,
+    sum(fi.NEVENTS) as S_NEVENTS,
+    count(fc.FILENAME) as S_CREATED,
+    count(fi.FILENAME) as S_INJECTED,
+    count(ftne.FILENAME) as S_NEW,
+    count(ftco.FILENAME) as S_COPIED,
+    count(ftch.FILENAME) as S_CHECKED,
+    count(ftin.FILENAME) as S_INSERTED,
+    count(ftre.FILENAME) as S_REPACKED,
+    count(fd.FILENAME) as S_DELETED,
+    max(fc.INSTANCE) as M_INSTANCE,
+    min(fc.CTIME) as START_WRITE_TIME,
+    max(fi.ITIME) as STOP_WRITE_TIME,
+    min(ftne.ITIME) as START_TRANS_TIME,
+    max(ftco.ITIME) as STOP_TRANS_TIME,
+    min(ftch.ITIME) as START_REPACK_TIME,
+    max(ftre.ITIME) as STOP_REPACK_TIME,
+    max(fi.COMMENT_STR) as HLTKEY,
+    systimestamp as LAST_UPDATE_TIME,
+    fc.STREAM,
+    count(distinct fc.INSTANCE) as N_INSTANCE,
+    max(fd.DTIME) as STOP_DELETE_TIME,
+    count(e.FILENAME) as S_NOTREPACKED
+  from CMS_STOMGR.FILES_CREATED fc
+    left outer join CMS_STOMGR.FILES_INJECTED fi
+      on fc.FILENAME=fi.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_NEW ftne
+      on fc.FILENAME=ftne.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_COPIED ftco
+      on fc.FILENAME=ftco.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_CHECKED ftch
+      on fc.FILENAME=ftch.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_INSERTED ftin
+      on fc.FILENAME=ftin.FILENAME
+    left outer join CMS_STOMGR.FILES_TRANS_REPACKED ftre
+      on fc.FILENAME=ftre.FILENAME
+    left outer join CMS_STOMGR.FILES_DELETED fd
+      on fc.FILENAME=fd.FILENAME
+    left outer join CMS_STOMGR.FILES_CREATED e
+      on fc.FILENAME=e.FILENAME
+         and (   e.STREAM = 'Error'
+              or e.STREAM like '%_NoRepack')
+  where fc.RUNNUMBER = :runnumber
+    and fc.PRODUCER = 'StorageManager'
+  group by fc.RUNNUMBER, fc.STREAM
+  order by fc.RUNNUMBER, fc.STREAM
+
+fcSPsummary: >
+  BEGIN
+  files_created_proc_summary( :filename );
+  END;
+
+updateCopyManagerMerge: >
+  merge into CMS_STOMGR.:table
+  using dual on (CMS_STOMGR.:table.FILENAME = :filename)
+  when matched then update set ITIME = CURRENT_TIMESTAMP
+  when not matched then insert (FILENAME, ITIME)
+    values (:filename, CURRENT_TIMESTAMP)
+
+updateCopyManager: >
+  insert into CMS_STOMGR.:table (FILENAME, ITIME)
+  values (:filename, CURRENT_TIMESTAMP)
+
+getCopyManagerStoredProc: >
+  BEGIN
+  CMS_STOMGR.:storedProc( :filename );
+  END;
+
+checkRunsEoLS: >
+  select HOSTNAME, INSTANCE, N_INSTANCES, N_LUMISECTIONS, STATUS,
+         MAX_LUMISECTION, LAST_CONSECUTIVE
+  from CMS_STOMGR.RUNS
+  where RUNNUMBER = :runnumber
+  order by INSTANCE
+
+checkStreamsEoLS: >
+  select INSTANCE, LUMISECTION, STREAM, sum(FILECOUNT) as FILES
+  from CMS_STOMGR.STREAMS
+  where RUNNUMBER = :runnumber
+  group by INSTANCE, STREAM, LUMISECTION
+  order by LUMISECTION, STREAM, INSTANCE
+
+checkFilesEoLS: >
+  select INSTANCE, LUMISECTION, STREAM, count(FILENAME) as FILES
+  from CMS_STOMGR.FILES_CREATED
+  where RUNNUMBER = :runnumber
+  and PRODUCER = 'StorageManager'
+  group by INSTANCE, STREAM, LUMISECTION
+  order by LUMISECTION, STREAM, INSTANCE
+
+checkTransferredFilesEoLS: >
+  select max(LUMISECTION)
+  from CMS_STOMGR.FILES_CREATED fc
+  left outer join CMS_STOMGR.FILES_TRANS_COPIED ftc on fc.FILENAME = ftc.FILENAME
+  where RUNNUMBER = :runnumber and INSTANCE = :instance
+  and PRODUCER = 'StorageManager'
+
+#
+# To check the HLT
+#
+
+# official runs from RUNINFO only (*)
+getOfficialRuns: >
+  select a.RUNNUMBER
+  from CMS_RUNINFO.runnumbertbl a, CMS_RUNINFO.runsession_parameter b
+  where a.RUNNUMBER = :runnumber
+    and (a.SEQUENCENAME = 'GLOBAL-RUN-COSMIC'
+       or a.SEQUENCENAME = 'GLOBAL-RUN')
+    and b.NAME = 'CMS.LVL0:GLOBAL_CONF_KEY'
+    and (b.STRING_VALUE = '/GLOBAL_CONFIGURATION_MAP/CMS/COSMICS/GLOBAL_RUN'
+       or b.STRING_VALUE = '/GLOBAL_CONFIGURATION_MAP/CMS/CENTRAL/GLOBAL_RUN')
+    and b.RUNNUMBER = a.RUNNUMBER
+
+# official runs from WBM
+getOfficialRunsWBM: >
+  select A.RUNNUMBER
+  from CMS_RUNINFO.RUNNUMBERTBL a,CMS_WBM.RUNSUMMARY b
+  where a.RUNNUMBER = :runnumber
+    and (a.SEQUENCENAME = 'GLOBAL-RUN-COSMIC'
+       or a.SEQUENCENAME = 'GLOBAL-RUN')
+    and (b.KEY = '/GLOBAL_CONFIGURATION_MAP/CMS/COSMICS/GLOBAL_RUN'
+       or b.KEY = '/GLOBAL_CONFIGURATION_MAP/CMS/CENTRAL/GLOBAL_RUN')
+    and b.RUNNUMBER = a.RUNNUMBER
+
+# Check a parameter in the runinfo table
+# sequence name: 'CMS.LVL0:SEQ_NAME'
+# global configuration key: 'CMS.LVL0:GLOBAL_CONF_KEY'
+# query for fill number as string: 'CMS.SCAL:FILLN'
+# query for energy setup as string: 'CMS.SCAL:EGEV'
+# HLT key description: 'CMS.LVL0:HLT_KEY_DESCRIPTION'
+# query for fed list (*): 'CMS.LVL0:FED_ENABLE_MASK'
+getRuninfoParameter: >
+  select rs.VALUE
+  from cms_runinfo.runsession_string rs, cms_runinfo.runsession_parameter rp
+  where rp.NAME = :parameter
+    and rp.RUNNUMBER = :runnumber
+    and rs.RUNSESSION_PARAMETER_ID = rp.ID
+  order by rp.ID
+
+# Check a date in the runinfo table
+# query for run start (*): 'CMS.LVL0:START_TIME_T'
+# query for run stop (*): 'CMS.LVL0:STOP_TIME_T'
+getRuninfoDate: >
+  select rd.VALUE
+  from cms_runinfo.runsession_date rd, cms_runinfo.runsession_parameter rp
+  where rp.NAME = :parameter
+    and rp.RUNNUMBER = :runnumber
+    and rd.RUNSESSION_PARAMETER_ID = rp.ID
+  order by rp.ID
+
+# Check an integer in the runinfo table
+# HLT key (*): 'CMS.LVL0:HLT_KEY'
+getRuninfoInteger: >
+  select ri.VALUE
+  from cms_runinfo.runsession_integer ri, cms_runinfo.runsession_parameter rp
+  where rp.NAME = :parameter
+    and rp.RUNNUMBER = :runnumber
+    and ri.RUNSESSION_PARAMETER_ID = rp.ID
+  order by rp.ID
+
+# query for event number, buggy since the number is 32 bit (?): 'CMS.LVL0:RUNSECTION_DELIMITER_EVTNO_%'
+# query for trigger number: 'CMS.LVL0:RUNSECTION_DELIMITER_TRGNO_%'
+getRunsessionMax: >
+  select max(ri.VALUE)
+  from cms_runinfo.runsession_parameter rp, cms_runinfo.runsession_integer ri
+  where rp.RUNNUMBER = :runnumber
+    and rp.NAME like :parameter
+    and rp.ID = ri.RUNSESSION_PARAMETER_ID
+  order by rp.ID
+
+# ----------------------------------
+# query for trigger rates
+getTriggerRates: >
+  select rd.VALUE, rp.TIME
+  from cms_runinfo.runsession_double rd, cms_runinfo.runsession_parameter rp
+  where rp.NAME = :parameter
+  and rp.RUNNUMBER = :runnumber
+    and rd.RUNSESSION_PARAMETER_ID = rp.ID
+  order by rp.ID
+
+# special query for DCS flags: when a pause occurs, the string value is 'null'
+getDCSFlags: >
+  select rp.NAME, rd.VALUE
+  from cms_runinfo.runsession_parameter rp, cms_runinfo.runsession_string rd
+  where rp.NAME = :parameter
+    and rp.RUNNUMBER = :runnumber
+    and rp.ID = rd.RUNSESSION_PARAMETER_ID
+
+# new query for lumisection numbers
+getMaxLumisection: >
+  select max(rd.VALUE) as lumi
+  from cms_runinfo.runsession_parameter rp, cms_runinfo.runsession_double rd
+  where rp.RUNNUMBER = :runnumber
+    and rp.NAME LIKE :parameter
+    and rp.ID = rd.RUNSESSION_PARAMETER_ID
+
+# query for run section delimiters
+getRunSectionDelimiters: >
+  select rp.NAME,
+    case
+      when rp.NAME LIKE 'CMS.LVL0:RUNSECTION_DELIMITER_TYPE_%'
+        then (select VALUE from cms_runinfo.runsession_string where RUNSESSION_PARAMETER_ID = rp.ID)
+      when rp.name LIKE 'CMS.LVL0:RUNSECTION_DELIMITER_DCSLHCFLAGS_%'
+        then (select VALUE from cms_runinfo.runsession_string where RUNSESSION_PARAMETER_ID = rp.ID)
+      else NULL
+    end AS value_string,
+    case
+      when rp.NAME LIKE 'CMS.LVL0:RUNSECTION_DELIMITER_AUTOACTION_%'
+        then (select VALUE from cms_runinfo.runsession_boolean where RUNSESSION_PARAMETER_ID = rp.ID)
+      else NULL
+    end AS value_bool,
+    case
+      when rp.NAME LIKE 'CMS.LVL0:RUNSECTION_DELIMITER_TIME_%'
+        then (select VALUE from cms_runinfo.runsession_date where RUNSESSION_PARAMETER_ID = rp.ID)
+      else NULL
+    end AS value_time,
+    case
+      when rp.NAME LIKE 'CMS.LVL0:RUNSECTION_DELIMITER_LS_%'
+        then (select VALUE from cms_runinfo.runsession_double where RUNSESSION_PARAMETER_ID = rp.ID)
+      else NULL
+    end AS value_double,
+    case
+      when rp.NAME LIKE 'CMS.LVL0:RUNSECTION_DELIMITER_EVTNO_%'
+        then (select VALUE from cms_runinfo.runsession_integer where RUNSESSION_PARAMETER_ID = rp.ID)
+      when rp.NAME LIKE 'CMS.LVL0:RUNSECTION_DELIMITER_TRGNO_%'
+        then (select VALUE from cms_runinfo.runsession_integer where RUNSESSION_PARAMETER_ID = rp.ID)
+      else NULL
+    end AS value_int
+  from cms_runinfo.runsession_parameter rp
+  where rp.NAME like 'CMS.LVL0:RUNSECTION_DELIMITER_%'
+    and rp.RUNNUMBER = :runnumber
+  order by rp.ID
+
+# current B field (*)
+getCurrentBFieldByTime: >
+  select * from (
+    select "CURRENT", CHANGE_DATE
+    from CMS_DCS_ENV_PVSS_COND.CMSFWMAGNET
+    where "CURRENT" is not null
+      and CHANGE_DATE < :time
+    order by CHANGE_DATE desc)
+  where ROWNUM = 1
+
+# current B field from Last Value table: seems broken!
+checkCurrentBField: >
+  select VALUE_NUMBER, CHANGE_DATE
+  from CMS_DCS_ENV_PVSS_COND.CMSFWMAGNET_LV
+  where DPE_NAME = 'CURRENT'
+
+# Check cmspage1 freshness for WBM
+checkWbmFreshness: >
+  with TempBuffer as (
+    select (UPDATETIME - TO_TIMESTAMP('19700101000000','YYYYMMDDHH24MISS'))
+      DAY(6) to SECOND(6) D2S
+    from CMS_RUNTIME_LOGGER.CMS_PAGE1_IMAGE
+    where HOSTNAME = 'srv-C2C03-09'
+  )
+  select
+    86400 * extract(DAY from D2S) +
+     3600 * extract(HOUR from D2S) +
+       60 * extract(MINUTE from D2S) +
+           extract(SECOND from D2S)
+      UPDATETIME
+  from TempBuffer
+
+# Check ECAL FEDs in error for Pedro Parracho
+checkEcalFeds: >
+  select RUNNUMBER, SRCID
+  from cms_daq_deadtime_r.fmmfeddeadtime
+  where
+  runnumber = (select max(runnumber) from cms_daq_deadtime_r.fmmfeddeadtime)
+    and INTEGRALTIMEERROR > 0
+    and SRCID > 600
+    and SRCID < 700
+  group by RUNNUMBER, SRCID
+  order by RUNNUMBER, SRCID
+
+# Check if a machine is blacklisted
+checkBlacklist: >
+  select h.hostname
+  from Daq_Bl_Hosts h
+    inner join Daq_Bl_Blacklist_Hosts bh on h.Host_ID = bh.Host_ID
+    inner join Daq_Bl_Blacklists b on bh.Blacklist_id = b.Blacklist_ID
+  where
+  h.hostname = :hostname
+    and b.setup_ID = 1
+    and bh.Blacklist_ID IN (
+        SELECT MAX(Blacklist_ID)
+        FROM Daq_Bl_Blacklists
+    )

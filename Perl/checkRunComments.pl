@@ -45,6 +45,7 @@ my $book = StorageManager::DB->new(%options);
 
 my $done = 0;
 
+# loop over Runs
 for my $runnumber ( $book->getRunList() ) {
     print "Checking run $runnumber:\n";
     my $badfiles = $book->checkRun($runnumber);
@@ -117,6 +118,6 @@ for my $runnumber ( $book->getRunList() ) {
             system( $t0script, @notify );
         }
     }
-}
+} # end loop over runs
 print "Reached maximum number of allowed updates ($max < $done).\n"
   if defined $max && $done > $max;

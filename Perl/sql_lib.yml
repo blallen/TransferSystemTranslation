@@ -1,5 +1,19 @@
-# SQL phrasebook to interface with CMS_STOMGR_W database
+# SQL phrasebook to interface with CMS_STOMGR database
 ---
+# for a given run (you pass the runnumber) (and possibly hostname if you pass a hostname)
+# chooses all files for this run from FILES_CREATED (alias = fc)
+# checks the following tables to see if the file is also there
+#   FILES_INJECTED       (fi)
+#   FILES_TRANS_NEW      (ftne)
+#   FILES_TRANS_COPIED   (ftco)
+#   FILES_TRANS_CHECKED  (ftch)
+#   FILES_TRANS_INSERTED (ftin)
+#   FILES_TRANS_REPACKED (ftre)
+#   FILES_DELETED	 (fd)
+# for whatever steps the file has failed, that column will be NULL
+# if a file has finished everything, you should have all values
+# also returns info about the runnumber lumisection etc from FILES_CREATED
+# also returns checksum, pathname, destination, etc from FILES_INJECTED
 checkRun: >
   select fc.HOSTNAME, fc.STREAM,
     fc.FILENAME as FILENAME,

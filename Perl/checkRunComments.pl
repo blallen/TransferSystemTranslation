@@ -46,10 +46,20 @@ my $book = StorageManager::DB->new(%options);
 my $done = 0;
 
 # loop over Runs
+# possible values of $book->getRunList()
+# whatever you passed as a command line argument (most likely?)
+# the latest run number in the database (if you don't pass any command line arguments)
+# an array of runs determined by $last and $skip (if you pass these as command line arguments)
 for my $runnumber ( $book->getRunList() ) {
     print "Checking run $runnumber:\n";
     my $badfiles = $book->checkRun($runnumber);
-#Here's where things get weird.  Again, knowing regex will come in VERY handy for this project.  I think Obasi worked more on the stuff below.
+    # let's see what DB::checkRun() does
+    # it returns a reference to a crazy nested hash with the structure below
+    # %badfiles is a hash  with keys that are states
+    # each state is a key to an anonymous hash that contains the filenames that are bad for that state as keys
+    # each filename is a key to an anonymous hash that contains the row for this file from the query
+
+# and now we do some stuff using the crazy %badfiles hash
 
   STATE:
     for my $state (map { ($_ => 'BLOCKED_' . $_) } @states) {

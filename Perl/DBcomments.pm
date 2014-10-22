@@ -76,6 +76,9 @@ our %hide = (
     FILES_TRANS_REPACKED => 1,
     FILES_DELETED        => 1,
 );
+# regex saying which machines to look at
+# srv-C2D05-02
+# notsure about others, don't seem to exist but 100+ possible host names is a lot to check
 our $hostre     = qr/^srv-c2(?:c0[67]-\d\d|d05-02)$/i;
 our $debug      = 0;
 our $force      = 0;
@@ -128,10 +131,10 @@ sub new {
         "debug"   => \$debug,
         "deleted" => \$showDeleted,
 
-        "config=s"    => \$config, # loaded from a config file
-        "runnumber=s" => \@runs,
-        "last=s"      => \$last,
-        "skip=s"      => \$skip,
+        "config=s"    => \$config, # pass name of config file from command line
+        "runnumber=s" => \@runs,   # pass runnumber you are interested in
+        "last=s"      => \$last,   # number of runs to remove from array
+        "skip=s"      => \$skip,   # number of runs to keep in array
         "hostname=s"  => \$hostname,
         "force"       => \$force,
         "fix"         => \$fix,
@@ -186,11 +189,14 @@ sub query {
 sub getRunList {
     my $self = shift;
     # check if @runs already exists
+    # @runs can be defined as a command line argument
     unless (@runs) { 
         my $book = $self->getBook(); # get phrasebook
         my $sth  = $book->query('getLatestRun'); # returns a statement handle with an array of run numbers listed in descending order
         $skip = 1 unless defined $skip; # should be initialized to undef when DB class is initialized
+	                                # can be set from command line arguments
         $last = 2 unless defined $last; # should be initialized to undef when DB class is initialized
+	                                # can be set from command line arguments
         unless (
             @runs = map { $_->[0] } @{ $sth->fetchall_arrayref( [0], $last + $skip ) }
 	    # @{stuff} returns an array of array references to the run numbers for the three latest runs 
@@ -213,8 +219,13 @@ sub getRunList {
     # thus reverse does nothing in default case, 
     # but would give you a set of runs in ascending order if you changed the default skip and last parameters
     if ($#runs) { # $#runs is max index of @runs array.... should be 0 at this point????
+	          # is zero unless you pass some commbination of $last and $skip that gives you more than one run
         print "Will check " . @runs . " runs: " . join( " ", @runs ) . "\n";
     }
+    # possible values of @runs by this point:
+    # whatever you passed as a command line argument (most likely?)
+    # the latest run number in the database (if you don't pass any command line arguments)
+    # an array of runs determined by $last and $skip (if you pass these as command line arguments)
     return @runs;
 }
 
@@ -554,31 +565,59 @@ sub checkRun {
         replace =>
           { hostname => $hostname ? "and HOSTNAME = '$hostname'" : '', }
     );
+    # returns a table containing info on if the file has passed various states
+    #   FILES_CREATED        (fc)
+    #   FILES_INJECTED       (fi)
+    #   FILES_TRANS_NEW      (ftne)
+    #   FILES_TRANS_COPIED   (ftco)
+    #   FILES_TRANS_CHECKED  (ftch)
+    #   FILES_TRANS_INSERTED (ftin)
+    #   FILES_TRANS_REPACKED (ftre)
+    #   FILES_DELETED	     (fd)
+    # as well as hostname info, and various info about the file creation and injection
 
     #Get query result - array elements will be '' when file not in that table.
     my $total = 0;
     my ( %badfiles, %goodfiles );
+    # %badfiles is a hash  with keys that are states
+    # each state is a key to an anonymous hash that contains the filenames that are bad for that state as keys
+    # each filename is a key to an anonymous hash that contains the row for this file from the query
+
+    # fetchrow_hashref returns undef when out of rows, so ends loop
+    # $result becomes a hash reference where the keys are the column names from the query
     while ( my $result = $checkHan->fetchrow_hashref ) {
-        my $host = $result->{HOSTNAME};
-        $total++;
+        # gets hostname from query
+	my $host = $result->{HOSTNAME}; 
+	$total++;
         next
           unless $host =~ /$hostre/;    # Host matches what we're interested in
         if ($debug) {
             $result->{$_} and $goodfiles{$_}++ for @states;
         }
+	# loop of number on entries in @states (available states are listed below the query itself)
         for my $index ( 0 .. $#states ) {
-            my $filename     = $result->{'FILES_CREATED'};
+            # get file name from FILES_CREATED column / table
+	    my $filename     = $result->{'FILES_CREATED'};
+	    # load next state into $state
             my $state        = $states[$index];
+	    # see above but with the next state after that
             my $nextstate    = $states[ $index + 1 ];
+	    # recursion is fun
             my $furtherstate = $states[ $index + 2 ];
+	    # check if next state has non-NULL entry
+	    # starts with FILES_CREATED
+	    # so first check is on FILES_INJECTED
             unless ( $nextstate && $result->{$nextstate} )
-            {                           # Next column is empty
-                 # Special case for files which do not get repacked nor inserted
-                if (   $state eq 'FILES_TRANS_CHECKED'
+            {                           
+              # Next column is empty, thus file didn't complete everything
+                 
+                # Special case for files which do not get repacked nor inserted
+		if (   $state eq 'FILES_TRANS_CHECKED'
                     && $result->{'FILES_DELETED'} )
                 {
                     if ( $result->{STREAM} eq 'Error' ) {
                         $badfiles{FILES_DELETED}->{$filename} = $result;
+			# stores query for these thing in a state called FILES_DELETED
                         last;
                     }
                 }
@@ -586,10 +625,17 @@ sub checkRun {
                 # But following column is not empty
                 if ( $furtherstate && $result->{$furtherstate} ) {
                     $badfiles{ 'BLOCKED_' . $state }->{$filename} = $result;
+		    # stores query for these thing in a state called BLOCKED_$STATE
                     last;
                 }
 
+		# Default for bad files
                 $badfiles{$state}->{$filename} = $result;
+		# %badfiles is a hash  with keys that are states
+		# each state is a key to an anonymous hash that contains the filenames that are bad for that state as keys
+		# each filename is a key to an anonymous hash that contains the row for this file from the query
+		# thus this stores the row for each query in some weird nested data structure
+
                 last;
             }
         }
@@ -597,6 +643,7 @@ sub checkRun {
     $debug && print "Found a total of $total files for $runnumber\n";
     $debug && print "Found $goodfiles{$_} files in $_\n" for keys %goodfiles;
     return \%badfiles;
+    # returns a reference to our crazy %badfiles nested hash mess
 }
 
 my %hltkeys;

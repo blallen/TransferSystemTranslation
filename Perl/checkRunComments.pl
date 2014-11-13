@@ -61,24 +61,48 @@ for my $runnumber ( $book->getRunList() ) {
 
 # and now we do some stuff using the crazy %badfiles hash
 
+# available states:
+# FILES_NOT_FOUND
+# FILES_CREATED
+# FILES_INJECTED
+# FILES_TRANS_NEW
+# FILES_TRANS_COPIED
+# FILES_TRANS_CHECKED
+# FILES_TRANS_INSERTED
+# FILES_TRANS_REPACKED
+# FILES_DELETED
+
+  # loops over a hash containing above states mapped to BLOCKED_* versions of them
   STATE:
     for my $state (map { ($_ => 'BLOCKED_' . $_) } @states) {
         next STATE unless exists $badfiles->{$state};
+	# skips states that are not in badfiles hash
         print scalar keys %{ $badfiles->{$state} },
           " files in $state ($message{$state}):\n";
+	# prints out number of files in given state (and what the meaning of state is)
         next STATE unless $state =~ /$wantedState/;
+	# check is state is the one you are interested in (can be set as an option... is all by default?)
+      # gets all bad files in the given state and then goes through them in order (assuming low to high)
       FILE:
         for my $filename ( sort keys %{ $badfiles->{$state} } ) {
             next FILE unless $filename =~ /$wantedFiles/;
+	    # checks if file is the one you are interested in (set as an option, is all by default?)
             my $badfile = $badfiles->{$state}->{$filename};
+	    # copy this particular file out of hash and into scalar variable $badfile
             my ( $host, $checksum, $size ) = @$badfile{qw(HOSTNAME CHECKSUM FILESIZE)};
+	    # gets host machine, checksum, and size of file from the SQL query row for this file 
             $checksum = '' unless defined $checksum;
             $size = '' unless defined $size;
+	    # set some safe defaults if things are undefined
             print "\t$filename $host $checksum $size\n"
               unless $hide{$state}
                   || (  !$full
                       && $state eq 'FILES_TRANS_CHECKED'
                       && $badfile->{STREAM} eq 'Error' );
+	    # prints file info unless
+	    # state is in hide vector --> default: FILES_TRANS_INSERTED, FILES_TRANS_REPACKED, FILES DELETED
+	    # or
+	    # the full display option is off, STATE is FILES_TRANS_CHECKED, and value of Stream (from query) is Error
 
             # Trying to fix
             if ( $state =~ /FILES_(NEW|CREATED)/ ) {

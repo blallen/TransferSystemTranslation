@@ -133,8 +133,8 @@ sub new {
 
         "config=s"    => \$config, # pass name of config file from command line
         "runnumber=s" => \@runs,   # pass runnumber you are interested in
-        "last=s"      => \$last,   # number of runs to remove from array
-        "skip=s"      => \$skip,   # number of runs to keep in array
+        "last=s"      => \$last,   # number of files to check
+        "skip=s"      => \$skip,   # number of files to skip before checking (starting with latest file) 
         "hostname=s"  => \$hostname,
         "force"       => \$force,
         "fix"         => \$fix,
@@ -195,8 +195,10 @@ sub getRunList {
         my $sth  = $book->query('getLatestRun'); # returns a statement handle with an array of run numbers listed in descending order
         $skip = 1 unless defined $skip; # should be initialized to undef when DB class is initialized
 	                                # can be set from command line arguments
+	                                # by default skip the latest file
         $last = 2 unless defined $last; # should be initialized to undef when DB class is initialized
 	                                # can be set from command line arguments
+                                        # by default check two files
         unless (
             @runs = map { $_->[0] } @{ $sth->fetchall_arrayref( [0], $last + $skip ) }
 	    # @{stuff} returns an array of array references to the run numbers for the three latest runs 
